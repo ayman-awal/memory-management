@@ -13,20 +13,23 @@
 
 /* the client socket descriptor for the connection to the server */
 int cli_sd = -1;
+int sockfd;
 
 /* attempts to read n (len) bytes from fd; returns true on success and false on failure. 
 It may need to call the system call "read" multiple times to reach the given size len. 
 */
+/*
 static bool nread(int fd, int len, uint8_t *buf) {
   return false;
-}
+} */
 
 /* attempts to write n bytes to fd; returns true on success and false on failure 
 It may need to call the system call "write" multiple times to reach the size len.
 */
+/*
 static bool nwrite(int fd, int len, uint8_t *buf) {
   return false;
-}
+} */
 
 /* Through this function call the client attempts to receive a packet from sd 
 (i.e., receiving a response from the server.). It happens after the client previously 
@@ -42,8 +45,9 @@ In your implementation, you can read the packet header first (i.e., read HEADER_
 and then use the length field in the header to determine whether it is needed to read 
 a block of data from the server. You may use the above nread function here.  
 */
+/*
 static bool recv_packet(int sd, uint32_t *op, uint16_t *ret, uint8_t *block) {
-}
+} */
 
 
 
@@ -57,8 +61,9 @@ otherwise it is NULL.
 The above information (when applicable) has to be wrapped into a jbod request packet (format specified in readme).
 You may call the above nwrite function to do the actual sending.  
 */
+/*
 static bool send_packet(int sd, uint32_t op, uint8_t *block) {
-}
+} */
 
 
 
@@ -68,14 +73,34 @@ static bool send_packet(int sd, uint32_t op, uint8_t *block) {
  * you will not call it in mdadm.c
 */
 bool jbod_connect(const char *ip, uint16_t port) {
+  struct sockaddr caddr;
+
+  if (cli_sd != -1){
+    return false;
+  }
+  else{
+    if (connect(*ip, &caddr, sizeof(caddr)) == 1){
+      sockfd = socket(AF_INET, SOCK_STREAM, 0);
+      cli_sd = sockfd;
+      return true;
+    }
+    else{
+      return false;
+    }
+  }
 }
 
 
 
 
 /* disconnects from the server and resets cli_sd */
+
 void jbod_disconnect(void) {
-}
+  if (cli_sd != -1){
+    close(sockfd);
+    cli_sd = -1;
+  }
+} 
 
 
 
@@ -85,5 +110,7 @@ void jbod_disconnect(void) {
 The meaning of each parameter is the same as in the original jbod_operation function. 
 return: 0 means success, -1 means failure.
 */
+
 int jbod_client_operation(uint32_t op, uint8_t *block) {
+  return 0;
 }
