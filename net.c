@@ -19,11 +19,10 @@ int sockfd;
 It may need to call the system call "read" multiple times to reach the given size len. 
 */
 
+
 static bool nread(int fd, int len, uint8_t *buf) {
   if (cli_sd == 1){
-    while (len != 0){
-      ssize_t read(fd, buf, len);
-    }
+    read(fd, buf, len);
     return true;
   }
   else{
@@ -35,11 +34,10 @@ static bool nread(int fd, int len, uint8_t *buf) {
 It may need to call the system call "write" multiple times to reach the size len.
 */
 
+
 static bool nwrite(int fd, int len, uint8_t *buf) {
   if (cli_sd == 1){
-    while (len != 0){
-      ssize_t write(fd, buf, len);
-    }
+    write(fd, buf, len);
     return true;
   }
   else{
@@ -61,10 +59,10 @@ In your implementation, you can read the packet header first (i.e., read HEADER_
 and then use the length field in the header to determine whether it is needed to read 
 a block of data from the server. You may use the above nread function here.  
 */
-/*
-static bool recv_packet(int sd, uint32_t *op, uint16_t *ret, uint8_t *block) {
-} */
 
+static bool recv_packet(int sd, uint32_t *op, uint16_t *ret, uint8_t *block) {
+  
+} 
 
 
 /* The client attempts to send a jbod request packet to sd (i.e., the server socket here); 
@@ -78,9 +76,30 @@ The above information (when applicable) has to be wrapped into a jbod request pa
 You may call the above nwrite function to do the actual sending.  
 */
 
-/*
+
 static bool send_packet(int sd, uint32_t op, uint8_t *block) {
-} */
+  uint8_t tempbuff[264];
+  uint32_t opcode;
+  int cmd, len;
+  opcode = op;
+
+  cmd = opcode >> 26; // Deconstructing the op to get the command
+
+  if (cmd == 4){
+    len = HEADER_LEN;
+    block = NULL;
+  } 
+  else{
+    len = HEADER_LEN + JBOD_BLOCK_SIZE;
+    memcpy(&tempbuff[8], block, JBOD_BLOCK_SIZE);
+  }
+
+  memcpy(&tempbuff[0], len, 2);
+  memcpy(&tempbuff[2], op, 4);
+
+  return nwrite(sockfd,len,tempbuff);
+  
+}
 
 
 
@@ -94,7 +113,7 @@ bool jbod_connect(const char *ip, uint16_t port) {
   caddr.sin_family = AF_INET;
   caddr.sin_port = htons(port);
   
-  inet_aton(*ip, caddr.sin_addr);
+  inet_aton(ip, &caddr.sin_addr);
 
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -111,9 +130,6 @@ bool jbod_connect(const char *ip, uint16_t port) {
     }
   }
 }
-
-
-
 
 /* disconnects from the server and resets cli_sd */
 
