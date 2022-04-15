@@ -18,18 +18,34 @@ int sockfd;
 /* attempts to read n (len) bytes from fd; returns true on success and false on failure. 
 It may need to call the system call "read" multiple times to reach the given size len. 
 */
-/*
+
 static bool nread(int fd, int len, uint8_t *buf) {
-  return false;
-} */
+  if (cli_sd == 1){
+    while (len != 0){
+      ssize_t read(fd, buf, len);
+    }
+    return true;
+  }
+  else{
+    return false; 
+  }
+} 
 
 /* attempts to write n bytes to fd; returns true on success and false on failure 
 It may need to call the system call "write" multiple times to reach the size len.
 */
-/*
+
 static bool nwrite(int fd, int len, uint8_t *buf) {
-  return false;
-} */
+  if (cli_sd == 1){
+    while (len != 0){
+      ssize_t write(fd, buf, len);
+    }
+    return true;
+  }
+  else{
+    return false; 
+  }
+} 
 
 /* Through this function call the client attempts to receive a packet from sd 
 (i.e., receiving a response from the server.). It happens after the client previously 
@@ -61,6 +77,7 @@ otherwise it is NULL.
 The above information (when applicable) has to be wrapped into a jbod request packet (format specified in readme).
 You may call the above nwrite function to do the actual sending.  
 */
+
 /*
 static bool send_packet(int sd, uint32_t op, uint8_t *block) {
 } */
@@ -73,14 +90,19 @@ static bool send_packet(int sd, uint32_t op, uint8_t *block) {
  * you will not call it in mdadm.c
 */
 bool jbod_connect(const char *ip, uint16_t port) {
-  struct sockaddr caddr;
+  struct sockaddr_in caddr;
+  caddr.sin_family = AF_INET;
+  caddr.sin_port = htons(port);
+  
+  inet_aton(*ip, caddr.sin_addr);
+
+  sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
   if (cli_sd != -1){
     return false;
   }
   else{
-    if (connect(*ip, &caddr, sizeof(caddr)) == 1){
-      sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (connect(sockfd, (const struct sockaddr *)&caddr, sizeof(caddr)) == 1){
       cli_sd = sockfd;
       return true;
     }
