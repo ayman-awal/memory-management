@@ -61,7 +61,9 @@ a block of data from the server. You may use the above nread function here.
 */
 
 static bool recv_packet(int sd, uint32_t *op, uint16_t *ret, uint8_t *block) {
-  
+  uint8_t tempbuff[264];
+
+  nread(, , );
 } 
 
 
