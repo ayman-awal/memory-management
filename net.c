@@ -21,13 +21,16 @@ It may need to call the system call "read" multiple times to reach the given siz
 
 
 static bool nread(int fd, int len, uint8_t *buf) {
-  if (cli_sd == 1){
-    read(fd, buf, len);
-    return true;
+  int bytesRead;
+  int index = 0;
+  int ogLen = len;
+
+  while (bytesRead != ogLen){
+    bytesRead = read(fd, buf + index, len);
+    index = bytesRead;
+    len -= bytesRead;
   }
-  else{
-    return false; 
-  }
+  return true;
 } 
 
 /* attempts to write n bytes to fd; returns true on success and false on failure 
@@ -36,13 +39,16 @@ It may need to call the system call "write" multiple times to reach the size len
 
 
 static bool nwrite(int fd, int len, uint8_t *buf) {
-  if (cli_sd == 1){
-    write(fd, buf, len);
-    return true;
+  int bytesWritten;
+  int index = 0;
+  int ogLen = len;
+
+  while (bytesWritten != ogLen){
+    bytesWritten = write(fd, buf + index, len);
+    index = bytesWritten;
+    len -= bytesWritten;
   }
-  else{
-    return false; 
-  }
+  return true;
 } 
 
 /* Through this function call the client attempts to receive a packet from sd 
@@ -61,9 +67,27 @@ a block of data from the server. You may use the above nread function here.
 */
 
 static bool recv_packet(int sd, uint32_t *op, uint16_t *ret, uint8_t *block) {
-  uint8_t tempbuff[264];
+  uint8_t tempbuff[HEADER_LEN];
+  uint16_t ogLen;
+  uint32_t tempOP;
+  uint16_t tempRet;
 
-  nread(, , );
+  nread(sd, HEADER_LEN, tempbuff);
+
+  memcpy(&ogLen, &tempbuff[0], 2);
+  memcpy(&tempOP, &tempbuff[2], 4);
+  memcpy(&tempRet, &tempbuff[6], 2);
+
+  *op = ntohl(tempOP);
+  *ret = ntohs(tempRet);
+  ogLen = ntohs(ogLen);
+
+  if (ogLen == (HEADER_LEN + JBOD_BLOCK_SIZE)) {
+    nread(sd, JBOD_BLOCK_SIZE, block);
+  }
+  
+  return true;
+
 } 
 
 
@@ -82,7 +106,8 @@ You may call the above nwrite function to do the actual sending.
 static bool send_packet(int sd, uint32_t op, uint8_t *block) {
   uint8_t tempbuff[264];
   uint32_t opcode;
-  int cmd, len;
+  int cmd;
+  uint16_t len;
   opcode = op;
 
   cmd = opcode >> 26; // Deconstructing the op to get the command
@@ -96,11 +121,15 @@ static bool send_packet(int sd, uint32_t op, uint8_t *block) {
     memcpy(&tempbuff[8], block, JBOD_BLOCK_SIZE);
   }
 
+  len = htons(len);
+  op = htonl(op);
+  
   memcpy(&tempbuff[0], len, 2);
   memcpy(&tempbuff[2], op, 4);
 
-  return nwrite(sockfd,len,tempbuff);
-  
+  nwrite(sd,len,tempbuff);
+
+  return true;
 }
 
 
@@ -152,5 +181,15 @@ return: 0 means success, -1 means failure.
 */
 
 int jbod_client_operation(uint32_t op, uint8_t *block) {
-  return 0;
+  uint16_t returnValue;
+
+  if (send_packet(cli_sd, op, block) == false) {
+    return false;
+  }
+  
+  if (recv_packet(cli_sd, &op, &returnValue, block) == false){
+    return false;
+  }
+  
+  return returnValue;
 }
