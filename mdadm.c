@@ -35,12 +35,11 @@ void get_address(uint32_t addr, int *disk,int *block, int *offset){ // Custom ma
 }
 
 void seek_operation(int disk,int block){
-    int opDisk;
+    int opDisk;  // op variables for disk and block
+    int opBlock;
 
     opDisk = bitshift(JBOD_SEEK_TO_DISK, disk,0);  // syscall for seeking the disk
     jbod_client_operation(opDisk,NULL);
-
-    int opBlock;
 
     opBlock = bitshift(JBOD_SEEK_TO_BLOCK,0,block);  // syscall for seeking the block
     jbod_client_operation(opBlock,NULL);
@@ -56,7 +55,7 @@ int mdadm_mount(void) {
 
   mount_op = JBOD_MOUNT << 26;  // bitshifting
 
-  mounted_successful = jbod_client_operation(mount_op,NULL);
+  mounted_successful = jbod_client_operation(mount_op,NULL); // sys call for mounting
 
   if (mounted_successful == 0){
     mount_check = 1;  // Sets the mount_check variable to 1
@@ -77,7 +76,7 @@ int mdadm_unmount(void) {
 
   unmount_op = JBOD_UNMOUNT << 26;  // bitshifting
 
-  unmounted_successful = jbod_client_operation(unmount_op,NULL);
+  unmounted_successful = jbod_client_operation(unmount_op,NULL); // syscall for unmounting
   
   if(unmounted_successful == 0){
     mount_check = 0;  // Sets the mount_check to 0, meaning it is unmounted
@@ -116,7 +115,7 @@ int mdadm_read(uint32_t addr, uint32_t len, uint8_t *buf) {
   return_length = len;
   modified_length = len;
   
-  
+
   while(modified_length > 0){   
     int bytesToBuf;
     int decrease;
@@ -133,11 +132,12 @@ int mdadm_read(uint32_t addr, uint32_t len, uint8_t *buf) {
     if (modified_length <= 256){
       int bytes_from_block;
 
-      bytes_from_block = 256 - offsetBytes;
+      bytes_from_block = 256 - offsetBytes;  // calculating bytes from offset
       
       decrease = minimum_value(bytes_from_block, modified_length);
+      // updating the length to be modified and the bytes to go to the buffer
       modified_length = modified_length - decrease;
-      bytesToBuf = decrease;
+      bytesToBuf = decrease;  
     }
 
     else if(modified_length == len) {
@@ -166,13 +166,13 @@ int mdadm_read(uint32_t addr, uint32_t len, uint8_t *buf) {
 }
 
 int mdadm_write(uint32_t addr, uint32_t len, const uint8_t *buf) {
-  int diskID;
+  int diskID;   // Creating the necessary variables
   int blockID;
   int offsetBytes;
   int modified_length;
   int bytes_so_far = 0;
 
-  uint8_t tempbuf[256];
+  uint8_t tempbuf[256]; // creating a temporary buffer
 
   if (mount_check == 0){
     return -1;
