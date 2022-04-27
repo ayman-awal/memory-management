@@ -19,9 +19,9 @@ It may need to call the system call "read" multiple times to reach the given siz
 */
 
 static bool nread(int fd, int len, uint8_t *buf) {
-  int bytesRead;
-  int index = 0;
-  int ogLen = len;
+  int bytesRead;  
+  int index = 0;  // initial index
+  int ogLen = len; // copying the value of len in the variable
 
   if (cli_sd == -1){
     return false;
