@@ -1,356 +1,380 @@
-#include <stdio.h>
-#include <string.h>
-#include <assert.h>
+// #include <stdio.h>
+// #include <string.h>
+// #include <assert.h>
 
-#include "mdadm.h"
-#include "jbod.h"
+// #include "mdadm.h"
+// #include "jbod.h"
 
-#include "cache.h"
+// #include "cache.h"
+// #include "net.h"
 
-int mount_check = 0; // Initially linear device is unmounted
+// jbod_error_t mount_check = JBOD_ALREADY_UNMOUNTED; // Initially linear device is unmounted
 
-// Creating necessary global variables for clean code
-int diskID;
-int blockID;
-int offsetBytes;
-int size_reading;
-int bytes_read;
+// // Creating necessary global variables for clean code
 
-uint8_t temp_buffer[256]; // creating a buffer
-uint32_t tempAddr;
 
-// Creating op variables
-uint32_t opDisk;
-uint32_t opBlock;
-uint32_t opRead;
-//uint32_t opCacheRead;
-uint32_t opWrite;
+// uint32_t bitshift(uint32_t command, uint32_t disk, uint32_t reserved, uint32_t block)
+// {
+//   uint32_t tempBlock, tempReserved, tempDisk, tempCommand, jbodVar;
+//   tempBlock = 0;    // temp variable for block
+//   tempCommand = 0;  // temp variable for command
+//   tempDisk = 0;     // temp variable for disk
+//   tempReserved = 0; // temp variable for reserved
+//   jbodVar = 0;
 
-int bitshift(uint32_t command, uint32_t disk, uint32_t reserved, uint32_t block)
-{
-  uint32_t tempBlock, tempReserved, tempDisk, tempCommand, jbodVar;
-  tempBlock = 0;    // temp variable for block
-  tempCommand = 0;  // temp variable for command
-  tempDisk = 0;     // temp variable for disk
-  tempReserved = 0; // temp variable for reserved
-  jbodVar = 0;
+//   tempCommand = command << 26;  // shifting bytes for command
+//   tempDisk = disk << 22;        // shifting bytes for disk
+//   tempReserved = reserved << 8; // shifting bytes for reserved
+//   tempBlock = block;
 
-  tempCommand = command << 26;  // shifting bytes for command
-  tempDisk = disk << 22;        // shifting bytes for disk
-  tempReserved = reserved << 8; // shifting bytes for reserved
-  tempBlock = block;
+//   jbodVar = tempCommand | tempDisk | tempReserved | tempBlock;
+//   return jbodVar;
+// }
 
-  jbodVar = tempCommand | tempDisk | tempReserved | tempBlock;
-  return jbodVar;
-}
+// int mdadm_mount(void){
+//   if (mount_check == 3)
+//   { // When linear device is not mounted
+//     mount_check = JBOD_ALREADY_MOUNTED;
+//     uint32_t op_mount = 0;
+//     op_mount = JBOD_MOUNT << 26;
+//     jbod_client_operation(op_mount, NULL); // Syscall during mount
+//     return 1;
+//   }
+//   else { // When linear device is mounted
+//     return -1;
+//   }
+// }
 
-int mdadm_mount(void){
-  if (mount_check == 0)
-  { // When linear device is not mounted
-    mount_check = 1;
-    jbod_operation(JBOD_MOUNT, NULL); // Syscall during mount
-    return 1;
-  }
-  else if (mount_check == 1)
-  { // When linear device is mounted
-    return -1;
-  }
-  return 1;
-}
+// int mdadm_unmount(void)
+// {
+//   if (mount_check == 2)
+//   { // When linear device is not mounted
+//     mount_check = JBOD_ALREADY_UNMOUNTED;
+//     uint32_t op_unmount = 0;
+//     op_unmount = JBOD_UNMOUNT << 26;
+//     jbod_client_operation(op_unmount, NULL); // Syscall during unmount
+//     return 1;
+//   }
+//   else
+//   { // When linear device is mounted
+//     return -1;
+//   }
+// }
 
-int mdadm_unmount(void)
-{
-  if (mount_check == 0)
-  { // When linear device is not mounted
-    return -1;
-  }
-  else
-  { // When linear device is mounted
-    mount_check = 0;
-    jbod_operation(JBOD_UNMOUNT, NULL); // Syscall during unmount
-    return 1;
-  }
-}
+// int mdadm_read(uint32_t addr, uint32_t len, uint8_t *buf)
+// {
+//   int diskID;
+//   int blockID;
+//   int offsetBytes;
+//   int size_reading;
+//   int bytes_read;
 
-int mdadm_read(uint32_t addr, uint32_t len, uint8_t *buf)
-{
-  if (mount_check == 0)
-  { // Check if linear device is mounted or not
-    return -1;
-  }
+//   uint32_t tempAddr;
+//   uint8_t temp_buffer[256];
+//   uint32_t opDisk;
+//   uint32_t opBlock;
+//   uint32_t opRead;
 
-  if (len > 1024)
-  { // Len cannot be more than 1024
-    return -1;
-  }
+//   if (mount_check == 3)
+//   { // Check if linear device is mounted or not
+//     return -1;
+//   }
 
-  if (addr > (JBOD_DISK_SIZE * JBOD_NUM_DISKS) || (addr + len) > (JBOD_DISK_SIZE * JBOD_NUM_DISKS))
-  { // Addr cannot be more than (JBOD_DISK_SIZE * JBOD_NUM_DISKS), neither can (addr + len)
-    return -1;
-  }
+//   if (len > 1024)
+//   { // Len cannot be more than 1024
+//     return -1;
+//   }
 
-  if (buf == NULL && len != 0)
-  {
-    return -1;
-  }
+//   if (addr > (JBOD_DISK_SIZE * JBOD_NUM_DISKS) || (addr + len) > (JBOD_DISK_SIZE * JBOD_NUM_DISKS))
+//   { // Addr cannot be more than (JBOD_DISK_SIZE * JBOD_NUM_DISKS), neither can (addr + len)
+//     return -1;
+//   }
 
-  if (len == 0 && buf == NULL)
-  {
-    return 0;
-  }
+//   if (buf == NULL && len != 0)
+//   {
+//     return -1;
+//   }
 
-  if (len == -1)
-  { // Returning fail when len equals to -1
-    return -1;
-  }
+//   if (len == 0 && buf == NULL)
+//   {
+//     return 0;
+//   }
 
-  else
-  {
-    size_reading = 0;  // the size of bytes to be read
-    bytes_read = 0;   // the total bytes already read
+//   if (len == -1)
+//   { // Returning fail when len equals to -1
+//     return -1;
+//   }
 
-    while (len > 0) // as long as the len is more than 0
-    {
-      tempAddr = addr % 256;  // the temporary addresss
-      diskID = addr / 65536;   // Calculates the diskID
-      blockID = addr / 256;  // Calculates the blockID
-      offsetBytes = 256 - tempAddr;  // Calculates the offset
+//   else
+//   {
+//     size_reading = 0;  // the size of bytes to be read
+//     bytes_read = 0;   // the total bytes already read
 
-      /*
-      opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
-      jbod_operation(opDisk, NULL);   // syscall for seeking the disk
+//     while (len > 0) // as long as the len is more than 0
+//     {
+//       tempAddr = addr % 256;  // the temporary addresss
+//       diskID = addr / 65536;   // Calculates the diskID
+//       blockID = addr / 256;  // Calculates the blockID
+//       offsetBytes = 256 - tempAddr;  // Calculates the offset
 
-      opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
-      jbod_operation(opBlock, NULL);  // syscall for seeking the block
+//       if (len < offsetBytes){
+//         size_reading = len;
 
-      opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
-      jbod_operation(opRead, temp_buffer);  // syscall for readng the block
-      */
-      
-      if (len < offsetBytes){
-        size_reading = len;
+//         if (cache_enabled()){ // There is a cache
 
-        if (cache_enabled() == true){ // There is a cache
+//           if (cache_lookup(diskID, blockID, temp_buffer) == 1){
+//             memcpy(buf + bytes_read, temp_buffer, size_reading);
+//           } 
+//           else{
+//             opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
+//             jbod_client_operation(opDisk, NULL);   // syscall for seeking the disk
 
-          if (cache_lookup(diskID, blockID, temp_buffer) == 1){
-            memcpy(buf + bytes_read, temp_buffer, size_reading);
-          } 
-          else{
-            opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
-            jbod_operation(opDisk, NULL);   // syscall for seeking the disk
+//             opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
+//             jbod_client_operation(opBlock, NULL);  // syscall for seeking the block
 
-            opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
-            jbod_operation(opBlock, NULL);  // syscall for seeking the block
-
-            opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
-            jbod_operation(opRead, temp_buffer);  // syscall for readng the block
+//             opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
+//             jbod_client_operation(opRead, temp_buffer);  // syscall for readng the block
             
-            cache_insert(diskID, blockID, temp_buffer);
-          }
-        }
-        else { // There is no cache
-          size_reading = len;  // len is the number of bytes to be read
+//             cache_insert(diskID, blockID, temp_buffer);
+//           }
+//         }
+//         else { // There is no cache
           
-          opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
-          jbod_operation(opDisk, NULL);   // syscall for seeking the disk
+//           opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
+//           jbod_client_operation(opDisk, NULL);   // syscall for seeking the disk
 
-          opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
-          jbod_operation(opBlock, NULL);  // syscall for seeking the block
+//           opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
+//           jbod_client_operation(opBlock, NULL);  // syscall for seeking the block
 
-          opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
-          jbod_operation(opRead, temp_buffer);  // syscall for readng the block
-          memcpy(buf + bytes_read, temp_buffer, size_reading); // doing the mem copy
-        }
-      }
-      else { // when len is greater than or equal to the offset
-        size_reading = offsetBytes; // offset is the number of bytes to be read
+//           opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
+//           jbod_client_operation(opRead, temp_buffer);  // syscall for readng the block
+          
+//           memcpy(buf + bytes_read, temp_buffer, size_reading); // doing the mem copy
+//         }
+//       }
+//       else { // when len is greater than or equal to the offset
+//         size_reading = offsetBytes; // offset is the number of bytes to be read
         
-        if (cache_enabled() == true) { // There is a cache
+//         if (cache_enabled()) { // There is a cache
           
-          if (cache_lookup(diskID, blockID, temp_buffer) == 1) {
-            memcpy(buf + bytes_read, temp_buffer, size_reading);
-          }
-          else {
-            opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
-            jbod_operation(opDisk, NULL);   // syscall for seeking the disk
+//           if (cache_lookup(diskID, blockID, temp_buffer) == 1) {
+//             memcpy(buf + bytes_read, temp_buffer, size_reading);
+//           }
+//           else {
+//             opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
+//             jbod_client_operation(opDisk, NULL);   // syscall for seeking the disk
 
-            opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
-            jbod_operation(opBlock, NULL);  // syscall for seeking the block
+//             opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
+//             jbod_client_operation(opBlock, NULL);  // syscall for seeking the block
 
-            opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
-            jbod_operation(opRead, temp_buffer);  // syscall for readng the block
-            cache_insert(diskID, blockID, temp_buffer);
-          }
-        }
-        else { // There is no cache
-          size_reading = offsetBytes;
-          opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
-          jbod_operation(opDisk, NULL);   // syscall for seeking the disk
+//             opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
+//             jbod_client_operation(opRead, temp_buffer);  // syscall for readng the block
+//             cache_insert(diskID, blockID, temp_buffer);
+//           }
+//         }
+//         else { // There is no cache
+//           opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
+//           jbod_client_operation(opDisk, NULL);   // syscall for seeking the disk
 
-          opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
-          jbod_operation(opBlock, NULL);  // syscall for seeking the block
+//           opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
+//           jbod_client_operation(opBlock, NULL);  // syscall for seeking the block
 
-          opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
-          jbod_operation(opRead, temp_buffer);  // syscall for readng the block
-          memcpy(buf + bytes_read, temp_buffer, size_reading);  // doing the mem copy
-        }
-      }
+//           opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
+//           jbod_client_operation(opRead, temp_buffer);  // syscall for readng the block
+          
+//           memcpy(buf + bytes_read, temp_buffer, size_reading);  // doing the mem copy
+//         }
+//       }
       
-      // updating the variables in the loop
-      addr += size_reading;
+//       // updating the variables in the loop
+//       addr += size_reading;
 
-      // calculating blockID and diskID
-      blockID = addr / 256;
-      diskID = addr / 65536;
+//       // calculating blockID and diskID
+//       blockID = addr / 256;
+//       diskID = addr / 65536;
 
-      // calculating the tempAddr to get the offset
-      tempAddr = addr % 256;
-      offsetBytes = 256 - tempAddr;
+//       // calculating the tempAddr to get the offset
+//       tempAddr = addr % 256;
+//       offsetBytes = 256 - tempAddr;
 
-      bytes_read += size_reading;  
-      len -= size_reading; // decreasing the length each iteration
+//       bytes_read += size_reading;  
+//       len -= size_reading; // decreasing the length each iteration
 
-      size_reading = 0; // resetting the size of bytes to be read each iteration
-    }
-    return bytes_read;
-  }
-}
+//       size_reading = 0; // resetting the size of bytes to be read each iteration
+//     }
+//     len = bytes_read;
+//   }
+//   return len;
+// }
 
-int mdadm_write(uint32_t addr, uint32_t len, const uint8_t *buf)
-{
-  if (mount_check == 0)
-  {
-    return -1;
-  }
+// int mdadm_write(uint32_t addr, uint32_t len, const uint8_t *buf)
+// {
+//   int diskID;
+//   int blockID;
+//   int offsetBytes;
+//   int size_reading;
+//   int bytes_read;
 
-  if (len > 1024)
-  { // Len cannot be more than 1024
-    return -1;
-  }
+//   uint32_t tempAddr;
+//   uint8_t temp_buffer[256];
+//   uint32_t opDisk;
+//   uint32_t opBlock;
+//   uint32_t opRead;
+//   uint32_t opWrite;
 
-  if (addr > (JBOD_DISK_SIZE * JBOD_NUM_DISKS) || (addr + len) > (JBOD_DISK_SIZE * JBOD_NUM_DISKS))
-  { // Addr cannot be more than (JBOD_DISK_SIZE * JBOD_NUM_DISKS), neither can (addr + len)
-    return -1;
-  }
+//   if (mount_check == 3)
+//   {
+//     return -1;
+//   }
 
-  if (buf == NULL && len != 0)
-  {
-    return -1;
-  }
+//   if (len > 1024)
+//   { // Len cannot be more than 1024
+//     return -1;
+//   }
 
-  if (len == 0 && buf == NULL)
-  {
-    return 0;
-  }
+//   if (addr > (JBOD_DISK_SIZE * JBOD_NUM_DISKS) || (addr + len) > (JBOD_DISK_SIZE * JBOD_NUM_DISKS))
+//   { // Addr cannot be more than (JBOD_DISK_SIZE * JBOD_NUM_DISKS), neither can (addr + len)
+//     return -1;
+//   }
 
-  if (len == -1)
-  { // Returning fail when len equals to -1
-    return -1;
-  }
+//   if (buf == NULL && len != 0)
+//   {
+//     return -1;
+//   }
 
-  else 
-  {
-    size_reading = 0;   // the size of bytes to be read
-    bytes_read = 0;     // the total bytes already read
+//   if (len == 0 && buf == NULL)
+//   {
+//     return 0;
+//   }
 
-    while (len > 0)  // as long as the len is more than 0
-    {
-      tempAddr = addr % 256;  // the temporary addresss
-      diskID = addr / 65536;   // Calculates the diskID
-      blockID = addr / 256;  // Calculates the blockID
-      offsetBytes = 256 - tempAddr;  // Calculates the offset
+//   if (len == -1)
+//   { // Returning fail when len equals to -1
+//     return -1;
+//   }
 
-      opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
-      jbod_operation(opDisk, NULL);  // syscall for seeking disk
+//   else 
+//   {
+//     size_reading = 0;   // the size of bytes to be read
+//     bytes_read = 0;     // the total bytes already read
 
-      opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
-      jbod_operation(opBlock, NULL);  // syscall for seeking block
+//     while (len > 0)  // as long as the len is more than 0
+//     {
+//       tempAddr = addr % 256;  // the temporary addresss
+//       diskID = addr / 65536;   // Calculates the diskID
+//       blockID = addr / 256;  // Calculates the blockID
+//       offsetBytes = 256 - tempAddr;  // Calculates the offset
 
-      // op created for write
-      opWrite = bitshift(JBOD_WRITE_BLOCK, diskID, 0, blockID);
+//       opDisk = bitshift(JBOD_SEEK_TO_DISK, diskID, 0, 0);
+//       jbod_client_operation(opDisk, NULL);  // syscall for seeking disk
+
+//       opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
+//       jbod_client_operation(opBlock, NULL);  // syscall for seeking block
+
+//       // op created for write
+//       //opWrite = bitshift(JBOD_WRITE_BLOCK, diskID, 0, blockID);
       
-      // op created for read
-      opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
+//       // op created for read
+//       //opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
       
 
-      if (len < offsetBytes){
-        size_reading = len;  // len is the reading size (size to be read)
+//       if (len < offsetBytes){
+//         size_reading = len;  // len is the reading size (size to be read)
 
-        if (cache_enabled() == true) { // If cache exists
-          if (cache_lookup(diskID, blockID, temp_buffer) == 1){
-            memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
-            cache_update(diskID, blockID, temp_buffer);
+//         if (cache_enabled()) { // If cache exists
+//           if (cache_lookup(diskID, blockID, temp_buffer) == 1){
+//             memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
+//             cache_update(diskID, blockID, temp_buffer);
             
-            jbod_operation(opWrite, temp_buffer);  // syscall for write
-          }
-          else {
-            jbod_operation(opRead, temp_buffer);  // syscall for read
-            jbod_operation(opBlock, NULL);  // syscall for seeking block
+//             opWrite = bitshift(JBOD_WRITE_BLOCK, diskID, 0, blockID);
+//             jbod_client_operation(opWrite, temp_buffer);  // syscall for write
+//           }
+//           else {
+//             opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
 
-            memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
-            jbod_operation(opWrite, temp_buffer);  // syscall for write
-
-            cache_insert(diskID, blockID, temp_buffer);
-          }
-        }
-
-        else {
-          jbod_operation(opRead, temp_buffer);  // syscall for read
-          jbod_operation(opBlock, NULL);  // syscall for seeking block
-
-          memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
-          jbod_operation(opWrite, temp_buffer);  // syscall for write
-        }
-      }
-
-      else {
-        size_reading = offsetBytes;  // the offset bytes will be read
-
-        if (cache_enabled() == true) { // If cache exists
-          if (cache_lookup(diskID, blockID, temp_buffer) == 1){
-            memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
-            cache_update(diskID, blockID, temp_buffer);
+//             jbod_client_operation(opRead, temp_buffer);  // syscall for read
+//             memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
             
-            jbod_operation(opWrite, temp_buffer);  // syscall for write
-          }
-          else {
-            jbod_operation(opRead, temp_buffer);  // syscall for read
-            jbod_operation(opBlock, NULL);  // syscall for seeking block
+//             opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
+//             jbod_client_operation(opBlock, NULL);  // syscall for seeking block
+//             jbod_client_operation(opWrite, temp_buffer);  // syscall for write
 
-            memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
-            jbod_operation(opWrite, temp_buffer);  // syscall for write
+//             cache_insert(diskID, blockID, temp_buffer);
+//           }
+//         }
 
-            cache_insert(diskID, blockID, temp_buffer);
-          }
-        } 
+//         else {
+//           opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
 
-        else{ // If cache does not exist
-          jbod_operation(opRead, temp_buffer);  // syscall for read
-          jbod_operation(opBlock, NULL);  // syscall for seeking block
+//           jbod_client_operation(opRead, temp_buffer);  // syscall for read
+//           memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
 
-          memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
-          jbod_operation(opWrite, temp_buffer);  // syscall for write
-        }
-      }
-        // updating the variables in the loop
+//           opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID); 
+//           jbod_client_operation(opBlock, NULL);  // syscall for seeking block
+          
+//           opWrite = bitshift(JBOD_WRITE_BLOCK, diskID, 0, blockID);
+//           jbod_client_operation(opWrite, temp_buffer);  // syscall for write
+//         }
+//       }
 
-      addr += size_reading;
+//       else {
+//         size_reading = offsetBytes;  // the offset bytes will be read
 
-      // calculating blockID and diskID
-      blockID = addr / 256;
-      diskID = addr / 65536;
+//         if (cache_enabled()) { // If cache exists
+//           if (cache_lookup(diskID, blockID, temp_buffer) == 1){
+//             memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
+//             cache_update(diskID, blockID, temp_buffer);
+            
+//             opWrite = bitshift(JBOD_WRITE_BLOCK, diskID, 0, blockID);
+//             jbod_client_operation(opWrite, temp_buffer);  // syscall for write
+//           }
+//           else {
+//             opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
+//             jbod_client_operation(opRead, temp_buffer); // syscall for read
 
-      // calculating the tempAddr to get the offset
-      tempAddr = addr % 256;
-      offsetBytes = 256 - tempAddr;
+//             memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
 
-      bytes_read += size_reading;  
-      len -= size_reading; // decreasing the length each iteration
+//             opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
+//             jbod_client_operation(opBlock, NULL); // syscall for seeking block
 
-      size_reading = 0; // resetting the size of bytes to be read each iteration
-    }
-    return bytes_read;
-  }
+//             opWrite = bitshift(JBOD_WRITE_BLOCK, diskID, 0, blockID);
+//             jbod_client_operation(opWrite, temp_buffer); // syscall for write
 
-  // return len;
-}
+//             cache_insert(diskID, blockID, temp_buffer);
+//           }
+//         } 
+
+//         else{ // If cache does not exist
+//           opRead = bitshift(JBOD_READ_BLOCK, diskID, 0, blockID);
+//             jbod_client_operation(opRead, temp_buffer); // syscall for read
+
+//             memcpy(temp_buffer + tempAddr, buf + bytes_read, size_reading);
+
+//             opBlock = bitshift(JBOD_SEEK_TO_BLOCK, 0, 0, blockID);
+//             jbod_client_operation(opBlock, NULL); // syscall for seeking block
+
+//             opWrite = bitshift(JBOD_WRITE_BLOCK, diskID, 0, blockID);
+//             jbod_client_operation(opWrite, temp_buffer); // syscall for write
+
+//         }
+//       }
+//         // updating the variables in the loop
+
+//       addr += size_reading;
+
+//       // calculating blockID and diskID
+//       blockID = addr / 256;
+//       diskID = addr / 65536;
+
+//       // calculating the tempAddr to get the offset
+//       tempAddr = addr % 256;
+//       offsetBytes = 256 - tempAddr;
+
+//       bytes_read += size_reading;  
+//       len -= size_reading; // decreasing the length each iteration
+
+//       size_reading = 0; // resetting the size of bytes to be read each iteration
+//     }
+//     len = bytes_read;
+//   }
+//   return len;
+// }
