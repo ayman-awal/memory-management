@@ -6,7 +6,7 @@
 #include "jbod.h"
 #include "net.h"
 
-int mount_check = 0;
+int mount_check = 0; // Variable which checks for the status of the mount
 
 
 int32_t bitshift(jbod_cmd_t command, int disk, int block){ // Custom made function for bitshifting while using syscalls
@@ -28,9 +28,16 @@ int minimum_value(int a , int b){  // Custom made function for finding the minim
 void get_address(uint32_t addr, int *disk,int *block, int *offset){ // Custom made function for acquiring the address
   int remainder;
 
+  // Getting the remainder by doing modulo
   remainder = addr % JBOD_DISK_SIZE;
+
+  // Getting the block
   *block = remainder /JBOD_BLOCK_SIZE;
+
+  // Getting the disk by dividing with disk size
   *disk = addr / JBOD_DISK_SIZE;
+
+  // Getting the offset by modulo
   *offset = addr % JBOD_BLOCK_SIZE; 
 }
 
@@ -115,12 +122,11 @@ int mdadm_read(uint32_t addr, uint32_t len, uint8_t *buf) {
   return_length = len;
   modified_length = len;
   
-
   while(modified_length > 0){   
     int bytesToBuf;
     int decrease;
      
-    if(cache_lookup(diskID,blockID,tempbuf) == -1){
+    if(cache_lookup(diskID,blockID,tempbuf) == -1){ // Looking up 
       int32_t opRead; // creating op variable for read
 
       opRead = bitshift(JBOD_READ_BLOCK,diskID,blockID);  // Sys call for read
@@ -159,7 +165,8 @@ int mdadm_read(uint32_t addr, uint32_t len, uint8_t *buf) {
 
     bytes_so_far = bytes_so_far + bytesToBuf;
     get_address(addr + bytes_so_far,&diskID, &blockID,&offsetBytes);
-    seek_operation(diskID,blockID);
+
+    seek_operation(diskID,blockID); // Calls function to seek for disk and block
     
   } 
   return return_length;
