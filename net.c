@@ -1,3 +1,13 @@
+
+/*
+Timings:
+
+For simple tests it takes around 2 seconds
+For linear tests it takes around 7 seconds
+For random tests it takes around 60 seconds
+*/
+
+
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,7 +84,7 @@ a block of data from the server. You may use the above nread function here.
 
 static bool recv_packet(int sd, uint32_t *op, uint16_t *ret, uint8_t *block) {
   uint8_t tempbuff[HEADER_LEN];  // Creating temporary buffers and other necessary variables
-  uint16_t ogLen;
+  uint16_t ogLen; // stores the value of the original length
   uint32_t tempOP;
   uint16_t tempRet;
   
