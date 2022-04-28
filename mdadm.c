@@ -8,6 +8,12 @@
 
 int mount_check = 0; // Variable which checks for the status of the mount
 
+int mounted_successful; // Variables used in mounting and unmounting
+int unmounted_successful;
+
+int32_t mount_op;  // op variables used in syscall for mounting and unmounting
+int32_t unmount_op;
+
 
 int32_t bitshift(jbod_cmd_t command, int disk, int block){ // Custom made function for bitshifting while using syscalls
   int32_t op;
@@ -25,20 +31,20 @@ int minimum_value(int a , int b){  // Custom made function for finding the minim
   }
 }
 
-void get_address(uint32_t addr, int *disk,int *block, int *offset){ // Custom made function for acquiring the address
+void getAddress(uint32_t addr, int *disk,int *block, int *offset){ // Custom made function for acquiring the address. Passing poinnters as parameters
   int remainder;
 
   // Getting the remainder by doing modulo
-  remainder = addr % JBOD_DISK_SIZE;
+  remainder = addr%65536;
 
   // Getting the block
-  *block = remainder /JBOD_BLOCK_SIZE;
+  *block = remainder/256;
 
   // Getting the disk by dividing with disk size
-  *disk = addr / JBOD_DISK_SIZE;
+  *disk = addr/65536;
 
   // Getting the offset by modulo
-  *offset = addr % JBOD_BLOCK_SIZE; 
+  *offset = addr%256; 
 }
 
 void seek_operation(int disk,int block){
@@ -52,13 +58,10 @@ void seek_operation(int disk,int block){
     jbod_client_operation(opBlock,NULL);
   }
 
-int mdadm_mount(void) {
-  int32_t mount_op;
-  int mounted_successful;
-  
+int mdadm_mount(void) {  
   if (mount_check == 1){  // returns fail if system is already mounted
    return -1;
- }
+  }
 
   mount_op = JBOD_MOUNT << 26;  // bitshifting
 
@@ -74,9 +77,6 @@ int mdadm_mount(void) {
 }
 
 int mdadm_unmount(void) {
-  int32_t unmount_op;
-  int unmounted_successful;
-  
   if(mount_check== 0){  // Returns fail if the system is already unmounted
     return -1;
   }
@@ -105,18 +105,20 @@ int mdadm_read(uint32_t addr, uint32_t len, uint8_t *buf) {
   if (mount_check == 0){
     return -1;
   }
-  if(addr < 0 || (addr + len > JBOD_DISK_SIZE * JBOD_NUM_DISKS)){
-    return -1;
-  }
   
-  if(len < 0 || len > 1024){
-    return -1;
-  }
   if(len != 0 && buf == NULL){
     return -1;
   }
 
-  get_address(addr, &diskID, &blockID, &offsetBytes);  // Does function call to get the address
+  if(addr < 0 || (addr + len > JBOD_DISK_SIZE * JBOD_NUM_DISKS)){
+    return -1;
+  }
+
+  if(len < 0 || len > 1024){
+    return -1;
+  }
+
+  getAddress(addr, &diskID, &blockID, &offsetBytes);  // Does function call to get the address
   seek_operation(diskID,blockID);
 
   return_length = len;
@@ -164,7 +166,7 @@ int mdadm_read(uint32_t addr, uint32_t len, uint8_t *buf) {
     memcpy(buf + bytes_so_far,tempbuf, bytesToBuf);
 
     bytes_so_far = bytes_so_far + bytesToBuf;
-    get_address(addr + bytes_so_far,&diskID, &blockID,&offsetBytes);
+    getAddress(addr + bytes_so_far,&diskID, &blockID,&offsetBytes);
 
     seek_operation(diskID,blockID); // Calls function to seek for disk and block
     
@@ -184,19 +186,20 @@ int mdadm_write(uint32_t addr, uint32_t len, const uint8_t *buf) {
   if (mount_check == 0){
     return -1;
   }
-
-  if(addr < 0 || addr + len > JBOD_DISK_SIZE * JBOD_NUM_DISKS){
-    return -1;
-  }
   
-  if(len < 0 || len > 1024){
-    return -1;
-  }
   if(len != 0 && buf == NULL){
     return -1;
   }
 
-  get_address(addr, &diskID, &blockID, &offsetBytes);
+  if(addr < 0 || addr + len > JBOD_DISK_SIZE * JBOD_NUM_DISKS){
+    return -1;
+  }
+
+  if(len < 0 || len > 1024){
+    return -1;
+  }
+
+  getAddress(addr, &diskID, &blockID, &offsetBytes);
   seek_operation(diskID,blockID);
 
   modified_length = len;
@@ -204,10 +207,9 @@ int mdadm_write(uint32_t addr, uint32_t len, const uint8_t *buf) {
   while(modified_length > 0){
     int bytesToBuf;
     int decrease;
+    int bytes_from_block;
     
     if (modified_length <= 256){
-      int bytes_from_block;
-      
       bytes_from_block = 256 - offsetBytes;
 
       decrease = minimum_value(bytes_from_block, modified_length);
@@ -216,8 +218,6 @@ int mdadm_write(uint32_t addr, uint32_t len, const uint8_t *buf) {
     }
 
     else if(modified_length == len){
-      int bytes_from_block;
-      
       bytes_from_block = 256 - offsetBytes;
 
       decrease = minimum_value(bytes_from_block, modified_length);
@@ -231,20 +231,20 @@ int mdadm_write(uint32_t addr, uint32_t len, const uint8_t *buf) {
     }
 
     if(cache_lookup(diskID,blockID, tempbuf) == -1){
-      int32_t opRead;
+      int32_t opRead; // op created for read syscall
 
-      opRead = bitshift(JBOD_READ_BLOCK, diskID,blockID);
+      opRead = bitshift(JBOD_READ_BLOCK, diskID,blockID); // bitshifting and syscall for read
       jbod_client_operation(opRead,tempbuf);
 
-      cache_insert(diskID,blockID,tempbuf);
+      cache_insert(diskID,blockID,tempbuf); // inserting into the cache
     }
     
-    memcpy(&tempbuf[offsetBytes],buf + bytes_so_far,bytesToBuf);
+    memcpy(&tempbuf[offsetBytes], buf + bytes_so_far,bytesToBuf);
     
     bytes_so_far = bytes_so_far + bytesToBuf;
 
-    int32_t opWrite;
-    opWrite = bitshift(JBOD_WRITE_BLOCK, diskID,blockID);
+    int32_t opWrite; // op created for write 
+    opWrite = bitshift(JBOD_WRITE_BLOCK, diskID,blockID); // performing write syscall and seeking the disk and block 
     seek_operation(diskID,blockID);
     
     jbod_client_operation(opWrite,tempbuf);
@@ -253,7 +253,7 @@ int mdadm_write(uint32_t addr, uint32_t len, const uint8_t *buf) {
       cache_update(diskID,blockID,tempbuf);
     }
     
-    get_address(addr + bytes_so_far,&diskID, &blockID,&offsetBytes);
+    getAddress(addr + bytes_so_far,&diskID, &blockID,&offsetBytes);
     seek_operation(diskID,blockID);
     
   }
